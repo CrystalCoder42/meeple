@@ -29,7 +29,7 @@ class Vector:
 
 
 class Meeple:
-    def __init__(self, image, initial_position):
+    def __init__(self, image, initial_position, color="blue"):
         """
         Initializes a meeple
         :param Image image: The image to draw on
@@ -38,7 +38,7 @@ class Meeple:
         self.x, self.y = initial_position
 
         self.size = 20
-        self.color = "blue"
+        self.color = color
         self.image = image
         self.drawer = ImageDraw.Draw(image)
         self.vector = Vector(10, 10)
@@ -78,18 +78,28 @@ class GameBoard(QWidget):
 
         self.img = Image.new("RGB", (1000, 1000), self.background)
         self.drawer = ImageDraw.Draw(self.img)
-        self.meeple = Meeple(self.img, (self.img.width / 2, self.img.height / 2))
+        self.meeples = [
+            Meeple(self.img, self.random_point()),
+            Meeple(self.img, self.random_point(), "yellow"),
+            Meeple(self.img, self.random_point(), "red"),
+            Meeple(self.img, self.random_point(), "green"),
+        ]
         self.label = QLabel(self)
         self.timer = QTimer()
         self.run()
 
+    def random_point(self):
+        return random.randint(0, self.width), random.randint(0, self.height)
+
     def draw(self):
         self.drawer.rectangle([(0, 0), (self.width, self.height)], self.background)
-        self.meeple.draw()
+        for meeple in self.meeples:
+            meeple.draw()
         self.label.setPixmap(pil2pixmap(self.img))
 
     def update(self):
-        self.meeple.update()
+        for meeple in self.meeples:
+            meeple.update()
         self.draw()
 
     def run(self):
