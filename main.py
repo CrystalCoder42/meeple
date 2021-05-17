@@ -2,7 +2,7 @@ import sys
 import io
 import random
 import numpy as np
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel
+from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QHBoxLayout, QVBoxLayout, QPushButton
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
 from PIL import Image, ImageDraw
@@ -116,23 +116,22 @@ class Background:
         self.image = Image.new("RGB", wh, color)
         self.drawer = ImageDraw.Draw(self.image)
         self.drawer.rectangle([(0, 0), wh], color, stroke, 10)
-        self.drawer.ellipse(
-            [(100, 100), (300, 300)],
-            "black"
-        )
-        for _ in range(random.randint(10, 30)):
-            x, y = self.random_point()
-            size = random.randint(50, 100)
-            self.drawer.ellipse(
-                [x - size/2, y-size/2, x + size/2, y+size/2],
-                (0, 0, 0)
-            )
 
     def get_pixel(self, xy):
         return self.image.getpixel(xy)
 
     def random_point(self):
         return random.randint(0, self.image.width), random.randint(0, self.image.height)
+
+    def add_circle(self, position=None, radius=None):
+        if not position:
+            position = self.random_point()
+
+        if not radius:
+            radius = random.randint(25, 50)
+
+        x, y = position
+        self.drawer.ellipse([x - radius, y - radius, x + radius, y + radius], (0, 0, 0))
 
 
 class GameBoard(QWidget):
@@ -146,18 +145,21 @@ class GameBoard(QWidget):
 
         self.image = Image.new("RGB", (1000, 1000))
         self.drawer = ImageDraw.Draw(self.image)
-        self.meeples = [
-            Meeple(self, self.random_point()),
-            # Meeple(self, self.random_point(), "yellow"),
-            # Meeple(self, self.random_point(), "red"),
-            Meeple(self, self.random_point(), "green"),
-        ]
+        self.meeples = []
         self.label = QLabel(self)
         self.timer = QTimer()
         self.run()
 
     def random_point(self):
         return random.randint(0, self.width), random.randint(0, self.height)
+
+    def add_meeple(self, position=None, color=None):
+        if not color:
+            color = random.choice(["green", "blue", "yellow", "red"])
+        if not position:
+            position = self.random_point()
+
+        self.meeples.append(Meeple(self, position, color))
 
     def draw(self):
         self.image.paste(self.background.image)
@@ -172,22 +174,61 @@ class GameBoard(QWidget):
 
     def run(self):
         self.draw()
-        self.show()
         self.timer.start(100)
         self.timer.timeout.connect(self.update)
 
+    def pause(self):
+        if self.timer.isActive():
+            self.timer.stop()
+        else:
+            self.timer.start()
+
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Space:
-            if self.timer.isActive():
-                self.timer.stop()
-            else:
-                self.timer.start()
+            self.pause()
         if event.key() == Qt.Key_Escape:
             self.close()
         event.accept()
 
 
+class MeepleSimulation(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.game_board = GameBoard()
+        self.resize(self.game_board.width + 500, self.game_board.height + 100)
+
+        main_layout = QHBoxLayout()
+
+        options = QWidget()
+        options_layout = QVBoxLayout()
+
+        pause_button = QPushButton("Pause")
+        pause_button.clicked.connect(self.game_board.pause)
+        options_layout.addWidget(pause_button)
+
+        additions = QWidget()
+        addition_layout = QHBoxLayout()
+
+        circle_button = QPushButton("Circle")
+        circle_button.clicked.connect(self.game_board.background.add_circle)
+        addition_layout.addWidget(circle_button)
+
+        meeple_button = QPushButton("Meeple")
+        meeple_button.clicked.connect(self.game_board.add_meeple)
+        addition_layout.addWidget(meeple_button)
+        additions.setLayout(addition_layout)
+
+        options_layout.addWidget(additions)
+        options.setLayout(options_layout)
+
+        main_layout.addWidget(self.game_board, 4)
+        main_layout.addWidget(options, 1)
+
+        self.setLayout(main_layout)
+        self.show()
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    ex = GameBoard()
+    ex = MeepleSimulation()
     sys.exit(app.exec_())
