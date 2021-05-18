@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QHBoxLayout, QVBoxLay
 from PyQt5.QtGui import QImage, QPixmap
 from PyQt5.QtCore import QTimer, Qt
 from PIL import Image, ImageDraw
+import threading
 
 
 def pil2pixmap(image):
@@ -45,7 +46,23 @@ class Sensor:
         self.radius = radius_range
 
     def angle_range(self, center):
-        return range(int(center - self.angle / 2), int(center + self.angle / 2))
+        return int(center - self.angle / 2), int(center + self.angle / 2)
+
+    def check_sense_area(self, position, center, image):
+        start, end = self.angle_range(center)
+        x, y = position
+        im2 = Image.new("RGB", image.size, "white")
+        mask = Image.new("L", image.size, 0)
+        draw = ImageDraw.Draw(mask)
+        draw.pieslice(
+            (x - self.radius, y - self.radius,
+             x + self.radius, y + self.radius),
+            start, end, fill=255)
+        im = Image.composite(image, im2, mask)
+        for pixel in im.getdata():
+            if pixel in [(0, 0, 0)]:
+                return True
+        return False
 
 
 class Meeple:
@@ -68,16 +85,6 @@ class Meeple:
         bottom_right = (self.x + self.size / 2, self.y + self.size / 2)
         shape = [top_left, bottom_right]
         self.parent.drawer.ellipse(shape, fill=self.color)
-        # shape = [
-        #     (self.x - self.sensor.radius, self.y - self.sensor.radius),
-        #     (self.x + self.sensor.radius, self.y + self.sensor.radius)
-        # ]
-        # self.parent.drawer.arc(
-        #     shape,
-        #     int(self.vector.direction - self.sensor.angle / 2),
-        #     int(self.vector.direction + self.sensor.angle / 2),
-        #     "red"
-        # )
 
     def update(self):
         self.sense()
@@ -89,26 +96,19 @@ class Meeple:
         self.y = min(max(0, self.y), self.parent.image.height)
 
     def sense(self):
-        for radius in range(1, self.sensor.radius + 1):
-            for angle in self.sensor.angle_range(self.vector.direction):
-                try:
-                    point_color = self.parent.background.get_pixel(get_arc_xy(angle, radius, (self.x, self.y)))
-                except:
-                    point_color = (0, 0, 0)
-                if point_color == (0, 0, 0):
-                    starting_angle = int(self.vector.direction - self.sensor.angle / 2)
-                    while starting_angle < 0:
-                        starting_angle += 360
-                    min_turn = min(int(180 * ((radius + 2) / self.sensor.radius)), 180)
-                    turn_range = (360 - starting_angle + min_turn, starting_angle + min_turn)
-                    change_by = random.randint(min(*turn_range), max(*turn_range))
-                    self.vector.direction += change_by
-                    while self.vector.direction > 360 or self.vector.direction < 0:
-                        if self.vector.direction > 360:
-                            self.vector.direction -= 360
-                        if self.vector.direction < 0:
-                            self.vector.direction += 360
-                    return
+        if self.sensor.check_sense_area((self.x, self.y), self.vector.direction, self.parent.background.image):
+            starting_angle = int(self.vector.direction - self.sensor.angle / 2)
+            while starting_angle < 0:
+                starting_angle += 360
+            turn_range = (360 - starting_angle + 10, starting_angle + 10)
+            change_by = random.randint(min(*turn_range), max(*turn_range))
+            self.vector.direction += change_by
+            while self.vector.direction > 360 or self.vector.direction < 0:
+                if self.vector.direction > 360:
+                    self.vector.direction -= 360
+                if self.vector.direction < 0:
+                    self.vector.direction += 360
+            return
 
 
 class Background:
@@ -142,6 +142,8 @@ class GameBoard(QWidget):
         self.resize(self.width, self.height)
 
         self.background = Background((self.width, self.height))
+
+        self.scan_threads = []
 
         self.image = Image.new("RGB", (1000, 1000))
         self.drawer = ImageDraw.Draw(self.image)
